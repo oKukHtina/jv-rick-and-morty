@@ -7,6 +7,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import mate.academy.rickandmorty.dto.external.ExternalResponseDto;
@@ -26,24 +27,34 @@ public class CharactersClient {
 
     public List<Character> downloadCharacters() {
         HttpClient httpClient = HttpClient.newHttpClient();
-        HttpRequest httpRequest = HttpRequest.newBuilder()
-                .GET()
-                .uri(URI.create(BASE_URL))
-                .build();
+        String nextPage = BASE_URL;
+        List<Character> allCharacters = new ArrayList<>();
 
-        try {
-            HttpResponse<String> response = httpClient.send(
-                    httpRequest,
-                    HttpResponse.BodyHandlers.ofString());
-            ExternalResponseDto responseDto = objectMapper.readValue(
-                    response.body(), ExternalResponseDto.class);
-            List<Character> list = responseDto.getResults().stream()
-                    .map(characterMapper::toEntity)
-                    .toList();
-            return characterRepository.saveAll(list);
-        } catch (IOException | InterruptedException e) {
-            throw new HttpSendRequestException("Cant send request to RickAndMorty API");
+        while (nextPage != null) {
+            HttpRequest httpRequest = HttpRequest.newBuilder()
+                    .GET()
+                    .uri(URI.create(nextPage))
+                    .build();
+            try {
+                HttpResponse<String> response = httpClient.send(
+                        httpRequest,
+                        HttpResponse.BodyHandlers.ofString());
+
+                ExternalResponseDto responseDto = objectMapper.readValue(
+                        response.body(), ExternalResponseDto.class);
+
+                List<Character> pageCharacters = responseDto.getResults().stream()
+                        .map(characterMapper::toEntity)
+                        .toList();
+                allCharacters.addAll(pageCharacters);
+
+                nextPage = responseDto.getInfo().next();
+            } catch (IOException | InterruptedException e) {
+                throw new HttpSendRequestException("Cant send request to RickAndMorty API");
+            }
         }
+
+        return characterRepository.saveAll(allCharacters);
     }
 
     @PostConstruct
